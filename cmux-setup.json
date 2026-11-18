@@ -1,0 +1,16 @@
+{
+  "cmuxSetup": 1,
+  "id": "manaflow-ai/newtab-threads-look",
+  "name": "Threads New Tab",
+  "tagline": "A New Tab page with the field on top, Recently Closed, and every chat as a quiet list.",
+  "description": "The New Tab page cmux once shipped as its Threads template, rebuilt as a cmux.newtab/1 app from public surfaces only: the field, the tabs you closed last, and every chat (Chats or Projects, a filter, a search), newest first. Remove it and your own New Tab page comes back.",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": "https://github.com/manaflow-ai/cmux-newtab-threads-look",
+  "screenshots": ["screenshots/after-few-light.png", "screenshots/after-few-dark.png"],
+
+  "cmuxProfile": 1,
+  "settings": {
+    "tabs.newTabApp": "local/customize"
+  }
+}

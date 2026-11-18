@@ -1,0 +1,22 @@
+{
+  "$schema": "https://cmux.dev/schemas/cmux-app/2.json",
+  "manifestVersion": 2,
+  "id": "local/customize",
+  "name": { "en": "Threads New Tab" },
+  "version": "1.0.0",
+  "description": "A New Tab page: the field, Recently Closed, then every chat as a quiet list, with Chats and Projects, a filter and a search.",
+  "engines": { "cmux": "^2.0" },
+  "repository": "https://github.com/manaflow-ai/cmux-newtab-threads-look",
+  "runtime": { "main": "main.js" },
+  "implements": {
+    "cmux.newtab/1": { "export": "renderNewTab", "title": "Threads", "symbol": "list.bullet" }
+  },
+  "scopes": {
+    "agent_chat:read": "List your agent chats: title, state, folder and times.",
+    "closed:read": "List the tabs you closed last, for Recently Closed.",
+    "closed:write": "Reopen a closed tab when you click it.",
+    "actions:run": "Start a chat, open an address or a terminal from the field, and open a chat you click."
+  },
+  "activation": ["onInterface:cmux.newtab/1"],
+  "files": ["main.js"]
+}
