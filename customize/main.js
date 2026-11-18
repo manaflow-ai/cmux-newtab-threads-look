@@ -85,7 +85,10 @@ const needsInput = (c) => c.state === "input"
 const failed = (c) => c.state === "failed" || c.state === "lost"
 const working = (c) => c.state === "working"
 const done = (c) => !working(c) && !needsInput(c) && !failed(c)
-const live = (c) => !done(c)
+// Live: running, asking, failed or unread, as cmux's own list leads with them.
+const live = (c) => !done(c) || Boolean(c.unread)
+// Asking or failed first, then running, then unread, then the rest.
+const rank = (c) => (needsInput(c) || failed(c) ? 0 : working(c) ? 1 : c.unread ? 2 : 3)
 const folder = (path) => (path ? path.replace(/\/+$/, "").split("/").pop() : "")
 const projectOf = (c) => c.project || folder(c.cwd) || "No folder"
 
@@ -100,12 +103,12 @@ const FILTERS = [
 function stateOf(c) {
   if (needsInput(c)) return { text: "Needs input", tone: "warning" }
   if (failed(c)) return { text: "Failed", tone: "danger" }
-  if (working(c)) return { text: "Working", tone: "secondary" }
-  if (c.unread) return { text: "Done", tone: "success" }
+  if (working(c)) return { text: "Running", tone: "secondary" }
+  if (c.unread) return { text: "Unread", tone: "secondary" }
   return null
 }
 
-// Every chat that passes the filter and the search: the live ones (working, asking, failed) lead,
+// Every chat that passes the filter and the search: the live ones (asking, failed, running, unread) lead,
 // as on cmux's own page, then the rest, newest first. The read returns every chat in no order, so
 // the page sorts them here (GAPS: a sorted, paged read in the daemon).
 const listed = computed(() => {
@@ -114,7 +117,7 @@ const listed = computed(() => {
   return chats()
     .filter((c) => !c.parent && keep(c))
     .filter((c) => !q || `${c.title} ${projectOf(c)}`.toLowerCase().includes(q))
-    .sort((a, b) => Number(live(b)) - Number(live(a)) || lastActivity(b) - lastActivity(a))
+    .sort((a, b) => rank(a) - rank(b) || lastActivity(b) - lastActivity(a))
 })
 
 const projects = computed(() => {
@@ -160,9 +163,12 @@ function field(context) {
           onSubmit: submit,
           onCancel: () => setDraft(""),
         }).font(14)
-      ),
-      Spacer(),
-      Button(Icon("arrow.up").size(12).color(() => (draft().trim() ? "primary" : "tertiary")), () => submit())
+      )
+        // The web scene gives a TextField no share of its row (GAPS), so a wide frame that the row
+        // shrinks to fit stands in for a field that fills it.
+        .frame({ width: 2000 })
+        .layoutPriority(1),
+      Button(Icon("composer.send").size(12).color(() => (draft().trim() ? "primary" : "tertiary")), () => submit())
         .help("Send")
         .disabled(() => !draft().trim()),
     ])
@@ -177,19 +183,20 @@ function field(context) {
 
 const head = (title) => mono(Text(title).font("caption").weight("medium").color("secondary")).paddingHorizontal(10).frame({ height: 30 })
 
-const KIND_SYMBOL = { tab: "rectangle.on.rectangle", screen: "rectangle.split.2x1", workspace: "square.stack", window: "macwindow" }
+// cmux icon pack names (the scene passes them through); closed.list names a kind only, not what a tab showed.
+const KIND_SYMBOL = { tab: "app.generic", screen: "app.generic", workspace: "workspace", window: "app.generic" }
 
 function closedSection() {
   return () =>
     closed().length
       ? VStack({ spacing: 0 }, [
-          head("Recently closed"),
+          head("Recently Closed"),
           ForEach({ items: closed, key: (item) => item.id }, (item) =>
             HStack({ spacing: 8 }, [
-              Icon(() => KIND_SYMBOL[item().kind] || "rectangle").size(12).color("tertiary"),
+              Icon(() => KIND_SYMBOL[item().kind] || "app.generic").size(12).color("tertiary"),
               mono(Text(() => item().name || "Untitled").font(13).lineLimit(1)),
               Spacer(),
-              mono(Text(() => age(Number(item().closed_at_ms))).font("caption").color("tertiary")).frame({ width: 40 }),
+              mono(Text(() => age(Number(item().closed_at_ms))).font("caption").color("tertiary")).fixedSize("horizontal"),
             ])
               .paddingHorizontal(10)
               .frame({ height: 28 })
@@ -208,17 +215,24 @@ function closedSection() {
 function chatLine(c, withProject = true) {
   const state = () => stateOf(c())
   return HStack({ spacing: 8 }, [
-    Icon(() => (working(c()) ? "circle.dashed" : needsInput(c()) ? "questionmark.bubble" : failed(c()) ? "exclamationmark.circle" : "bubble.left"))
+    Icon(() => (working(c()) ? "status.running" : needsInput(c()) ? "status.needsinput" : failed(c()) ? "status.failure" : c().unread ? "unread.dot" : "agent.chat"))
       .size(12)
       .color(() => (state() ? state().tone : "tertiary")),
-    mono(Text(() => c().title || "Untitled chat").font(13).weight(() => (c().unread ? "medium" : "regular")).lineLimit(1)).layoutPriority(1),
+    // Live chats in full color; the rest quieter, as cmux's own list draws them.
+    mono(
+      Text(() => c().title || "Untitled chat")
+        .font(13)
+        .weight(() => (c().unread ? "medium" : "regular"))
+        .color(() => (live(c()) ? "primary" : "secondary"))
+        .lineLimit(1)
+    ).layoutPriority(1),
     withProject ? mono(Text(() => projectOf(c())).font("caption").color("tertiary").lineLimit(1)) : null,
     Spacer(),
     () => {
       const s = state()
       return s
         ? mono(Text(s.text).font("caption").color(s.tone)).fixedSize("horizontal")
-        : mono(Text(() => age(lastActivity(c()))).font("caption").color("tertiary")).frame({ width: 40 })
+        : mono(Text(() => age(lastActivity(c()))).font("caption").color("tertiary")).fixedSize("horizontal")
     },
   ])
     .paddingHorizontal(10)
@@ -232,12 +246,9 @@ function chatLine(c, withProject = true) {
 }
 
 function tab(id, title) {
-  return mono(Text(title).font("caption").weight("medium").color(() => (view() === id ? "primary" : "tertiary")))
-    .paddingHorizontal(8)
+  return mono(Text(title).font(13).weight(() => (view() === id ? "semibold" : "medium")).color(() => (view() === id ? "primary" : "secondary")))
+    .paddingHorizontal(6)
     .frame({ height: 24 })
-    .cornerRadius(6)
-    .background(() => (view() === id ? "selected" : null))
-    .hoverBackground("hover")
     .cursor("pointer")
     .onTap(() => {
       setView(id)
@@ -249,13 +260,13 @@ function chatsHeader() {
   return HStack({ spacing: 4 }, [
     tab("chats", "Chats"),
     tab("projects", "Projects"),
-    Menu(() => (filter() === "all" ? "Filter" : (FILTERS.find((f) => f.id === filter()) || FILTERS[0]).title), FILTERS.map((f) => Button(f.title, () => {
+    Menu(() => (filter() === "all" ? "All" : (FILTERS.find((f) => f.id === filter()) || FILTERS[0]).title), FILTERS.map((f) => Button(f.title, () => {
       setFilter(f.id)
       setShown(PAGE)
     }))),
     Spacer(),
     HStack({ spacing: 4 }, [
-      Icon("magnifyingglass").size(11).color("tertiary"),
+      Icon("search").size(11).color("tertiary"),
       mono(TextField(query, { placeholder: "Search", onEdit: (t) => (setQuery(t), setShown(PAGE)), onCancel: () => setQuery("") }).font(12)),
     ])
       .paddingHorizontal(8)
@@ -279,8 +290,16 @@ function more(total) {
 }
 
 function chatList() {
-  const page = computed(() => listed().slice(0, shown()))
-  return VStack({ spacing: 0 }, [LazyVStack({ spacing: 0 }, [ForEach({ items: page, key: (c) => c.id }, (c) => chatLine(c))]), more(() => listed().length)])
+  // The live chats, a rule, then the rest by age, as cmux's own list draws them.
+  const leading = computed(() => listed().filter(live))
+  const rest = computed(() => listed().filter((c) => !live(c)))
+  const page = computed(() => rest().slice(0, shown()))
+  return VStack({ spacing: 0 }, [
+    ForEach({ items: leading, key: (c) => c.id }, (c) => chatLine(c)),
+    () => (leading().length && rest().length ? Divider().paddingVertical(6) : null),
+    LazyVStack({ spacing: 0 }, [ForEach({ items: page, key: (c) => c.id }, (c) => chatLine(c))]),
+    more(() => rest().length),
+  ])
 }
 
 function projectList() {
@@ -289,7 +308,7 @@ function projectList() {
       const open = () => !folded()[p().id]
       return VStack({ spacing: 0 }, [
         HStack({ spacing: 6 }, [
-          Icon("chevron.right").size(9).color("tertiary").rotation(() => (open() ? 90 : 0)),
+          Icon(() => (open() ? "disclosure.expanded" : "disclosure.collapsed")).size(10).color("tertiary"),
           mono(Text(() => p().name).font("caption").weight("medium").color("secondary")),
           mono(Text(() => String(p().rows.length)).font("caption").color("tertiary")),
           Spacer(),
