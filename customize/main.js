@@ -85,6 +85,7 @@ const needsInput = (c) => c.state === "input"
 const failed = (c) => c.state === "failed" || c.state === "lost"
 const working = (c) => c.state === "working"
 const done = (c) => !working(c) && !needsInput(c) && !failed(c)
+const live = (c) => !done(c)
 const folder = (path) => (path ? path.replace(/\/+$/, "").split("/").pop() : "")
 const projectOf = (c) => c.project || folder(c.cwd) || "No folder"
 
@@ -104,15 +105,16 @@ function stateOf(c) {
   return null
 }
 
-// Every chat that passes the filter and the search, newest first. The read returns every chat in
-// no order, so the page sorts them here (GAPS: a sorted, paged read in the daemon).
+// Every chat that passes the filter and the search: the live ones (working, asking, failed) lead,
+// as on cmux's own page, then the rest, newest first. The read returns every chat in no order, so
+// the page sorts them here (GAPS: a sorted, paged read in the daemon).
 const listed = computed(() => {
   const keep = (FILTERS.find((f) => f.id === filter()) || FILTERS[0]).keep
   const q = query().trim().toLowerCase()
   return chats()
     .filter((c) => !c.parent && keep(c))
     .filter((c) => !q || `${c.title} ${projectOf(c)}`.toLowerCase().includes(q))
-    .sort((a, b) => lastActivity(b) - lastActivity(a))
+    .sort((a, b) => Number(live(b)) - Number(live(a)) || lastActivity(b) - lastActivity(a))
 })
 
 const projects = computed(() => {

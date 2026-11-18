@@ -1,5 +1,7 @@
 # Threads New Tab
 
+[![Get it on cmux](https://cmux.com/extensions/badge.svg)](https://cmux.com/setups/manaflow-ai/cmux-newtab-threads-look)
+
 ![The Threads New Tab page in light and dark](screenshots/after-few-light.png)
 
 A New Tab page with the field on top, the tabs you closed last under it, and every chat as a quiet list, newest first: Chats or Projects, a filter (All, Working, Needs input, Done) and a search.
